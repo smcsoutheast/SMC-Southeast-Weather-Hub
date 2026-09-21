@@ -1,9 +1,4 @@
-// Firebase setup for SMC Southeast Weather Hotline
-// 1. Create a Firebase project.
-// 2. Add a Realtime Database.
-// 3. Copy your web app config below.
-// 4. Change enabled to true.
-
+// Firebase configuration for SMC Southeast Weather Hotline
 window.SMC_FIREBASE_CONFIG = {
   enabled: true,
   apiKey: "AIzaSyBgRTW1MV-Jew5y0wayfr06N_HGdvRoDIo",

@@ -6,12 +6,12 @@
 
 window.SMC_FIREBASE_CONFIG = {
   enabled: false,
-  apiKey: "PASTE_API_KEY_HERE",
-  authDomain: "PASTE_PROJECT_ID.firebaseapp.com",
-  databaseURL: "https://PASTE_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_PROJECT_ID.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID",
+  apiKey: "AIzaSyBgRTW1MV-Jew5y0wayfr06N_HGdvRoDIo",
+  authDomain: "southeast-weather-hub.firebaseapp.com",
+  databaseURL: "https://southeast-weather-hub-default-rtdb.firebaseio.com/",
+  projectId: "southeast-weather-hub",
+  storageBucket: "southeast-weather-hub.firebasestorage.app",
+  messagingSenderId: "1023486649713",
+  appId: "1:1023486649713:web:678d3ba0b4c456137e42d0",
   readOnlyPublic: false
 };

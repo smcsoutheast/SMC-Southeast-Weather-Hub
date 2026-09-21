@@ -8,7 +8,7 @@ window.SMC_FIREBASE_CONFIG = {
   enabled: true,
   apiKey: "AIzaSyBgRTW1MV-Jew5y0wayfr06N_HGdvRoDIo",
   authDomain: "southeast-weather-hub.firebaseapp.com",
-  databaseURL: "https://southeast-weather-hub-default-rtdb.firebaseio.com/",
+  databaseURL: "https://southeast-weather-hub-default-rtdb.firebaseio.com",
   projectId: "southeast-weather-hub",
   storageBucket: "southeast-weather-hub.firebasestorage.app",
   messagingSenderId: "1023486649713",

@@ -181,9 +181,7 @@ Your repository should show `index.html`, `style.css`, `script.js`, `README.md`,
 
 Do not upload the parent folder into the repository. GitHub Pages will not load the site from the expected root URL if `index.html` is nested inside that folder.
 
-## Theme selector update
 
-The public page now includes a Theme selector inside the Current Operations Note card.
 
 Options:
 
@@ -191,3 +189,65 @@ Options:
 - Dark
 
 The selected theme is saved in the visitor's browser, so the page keeps the same theme on return visits.
+
+## Firebase update
+
+This version includes optional Firebase Realtime Database sync.
+
+Files added or changed:
+
+- firebase-config.js
+- index.html
+- script.js
+- style.css
+
+Firebase lets the hotline sync updates across multiple devices.
+
+### Firebase setup steps
+
+1. Go to Firebase Console.
+2. Create a new project.
+3. Add a Web App to the project.
+4. Copy the Firebase config values.
+5. Open `firebase-config.js`.
+6. Replace the placeholder values.
+7. Change `enabled: false` to `enabled: true`.
+8. In Firebase, create a Realtime Database.
+9. Start in test mode for setup.
+10. Publish the updated files to GitHub.
+
+### Realtime Database path
+
+The hotline saves data here:
+
+`southeast-weather-hotline/live-data`
+
+### Basic setup rules for testing
+
+Use these only for testing while the page is being set up:
+
+```json
+{
+  "rules": {
+    "southeast-weather-hotline": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}
+```
+
+For live use, restrict write access before sharing the admin password widely.
+
+### How Firebase behaves
+
+- If Firebase is enabled and configured, updates sync across devices.
+- If Firebase is not enabled, the page still works with browser localStorage.
+- The Command Center shows Firebase Sync status.
+- Public users see live updates when Firebase is active.
+- Admin updates save locally first, then sync to Firebase.
+
+
+## Display Theme
+
+The public hotline and command center use a fixed light theme. There is no visitor theme selector.

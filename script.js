@@ -4,7 +4,7 @@ const ADMIN_USERS = [
 ];
 
 const STORAGE_KEY = "smcSoutheastWeatherHotlinePhase3AdminTabs";
-const THEME_KEY = "smcSoutheastWeatherTheme";
+const FIREBASE_DATA_PATH = "southeast-weather-hotline/live-data";
 const LEGACY_KEYS = [];
 
 const regions = ["Florida", "North Carolina", "South Carolina", "Alabama", "Georgia"];
@@ -58,7 +58,11 @@ let data = loadData();
 let adminUnlocked = false;
 let currentAdmin = null;
 let lightningPanelExpanded = false;
-let currentTheme = loadTheme();
+let firebaseDb = null;
+let firebaseReady = false;
+let firebaseListening = false;
+let suppressFirebasePush = false;
+let pendingFirebaseSave = null;
 
 const elements = {
   globalStatus: document.getElementById("globalStatus"),
@@ -88,7 +92,6 @@ const elements = {
   lockBtn: document.getElementById("lockBtn"),
   fullScreenBtn: document.getElementById("fullScreenBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
-  themeSelect: document.getElementById("themeSelect"),
   clearHistoryBtn: document.getElementById("clearHistoryBtn"),
   globalForm: document.getElementById("globalForm"),
   globalTemplateSelect: document.getElementById("globalTemplateSelect"),
@@ -103,6 +106,8 @@ const elements = {
   adminDrawer: document.getElementById("adminDrawer"),
   minimizeAdminBtn: document.getElementById("minimizeAdminBtn"),
   adminSessionText: document.getElementById("adminSessionText"),
+  firebaseStatusText: document.getElementById("firebaseStatusText"),
+  firebaseStatusBadge: document.getElementById("firebaseStatusBadge"),
   timelineForm: document.getElementById("timelineForm"),
   timelineTitleInput: document.getElementById("timelineTitleInput"),
   timelineBodyInput: document.getElementById("timelineBodyInput"),
@@ -138,22 +143,6 @@ const elements = {
 };
 
 
-function loadTheme() {
-  const savedTheme = localStorage.getItem(THEME_KEY);
-  if (["light", "dark"].includes(savedTheme)) return savedTheme;
-  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
-  return "light";
-}
-
-function applyTheme(theme) {
-  const nextTheme = theme === "dark" ? "dark" : "light";
-  currentTheme = nextTheme;
-  document.body.dataset.theme = nextTheme;
-  localStorage.setItem(THEME_KEY, nextTheme);
-  const themeMeta = document.querySelector('meta[name="theme-color"]');
-  if (themeMeta) themeMeta.setAttribute("content", nextTheme === "dark" ? "#0f172a" : "#071a33");
-  if (elements.themeSelect) elements.themeSelect.value = nextTheme;
-}
 
 function safeUUID() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -236,9 +225,88 @@ function migrateData(saved) {
   return merged;
 }
 
-function saveData() {
+function saveData(options = {}) {
   data.globalStatus = calculateGlobalStatus(data.venues);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (!options.skipFirebase) pushDataToFirebase();
+}
+
+function getFirebaseConfig() {
+  const config = window.SMC_FIREBASE_CONFIG || {};
+  if (!config.enabled) return null;
+  if (!config.apiKey || !config.authDomain || !config.databaseURL || !config.projectId) return null;
+  return config;
+}
+
+function updateFirebaseStatus(status, message) {
+  if (!elements.firebaseStatusText || !elements.firebaseStatusBadge) return;
+  elements.firebaseStatusText.textContent = message;
+  elements.firebaseStatusBadge.textContent = status;
+  elements.firebaseStatusBadge.className = `sync-badge ${status.toLowerCase().replace(/\s+/g, "-")}`;
+}
+
+function initFirebase() {
+  const config = getFirebaseConfig();
+  if (!config) {
+    updateFirebaseStatus("Local Only", "Firebase is not connected. This page currently saves updates to this browser only.");
+    return;
+  }
+
+  if (!window.firebase || !window.firebase.database) {
+    updateFirebaseStatus("Offline", "Firebase scripts did not load. Check your internet connection or script tags.");
+    return;
+  }
+
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    firebaseDb = firebase.database();
+    firebaseReady = true;
+    updateFirebaseStatus("Connected", "Firebase connected. Updates sync across devices in real time.");
+    listenToFirebase();
+
+    if (!config.readOnlyPublic) {
+      const localSnapshot = localStorage.getItem(STORAGE_KEY);
+      if (localSnapshot && data.lastUpdated) pushDataToFirebase();
+    }
+  } catch (error) {
+    console.error("Firebase setup error", error);
+    updateFirebaseStatus("Error", "Firebase setup failed. Check firebase-config.js and Realtime Database rules.");
+  }
+}
+
+function listenToFirebase() {
+  if (!firebaseReady || firebaseListening) return;
+  firebaseListening = true;
+  firebaseDb.ref(FIREBASE_DATA_PATH).on("value", snapshot => {
+    const remoteData = snapshot.val();
+    if (!remoteData) {
+      updateFirebaseStatus("Connected", "Firebase connected. No cloud data has been saved yet.");
+      return;
+    }
+
+    suppressFirebasePush = true;
+    data = migrateData(remoteData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    suppressFirebasePush = false;
+    updateFirebaseStatus("Synced", `Last cloud sync: ${nowStamp()}`);
+    render();
+  }, error => {
+    console.error("Firebase read error", error);
+    updateFirebaseStatus("Error", "Firebase read failed. Check Realtime Database rules.");
+  });
+}
+
+function pushDataToFirebase() {
+  if (suppressFirebasePush || !firebaseReady || !firebaseDb) return;
+  clearTimeout(pendingFirebaseSave);
+  pendingFirebaseSave = setTimeout(() => {
+    firebaseDb.ref(FIREBASE_DATA_PATH).set(data)
+      .then(() => updateFirebaseStatus("Synced", `Last cloud save: ${nowStamp()}`))
+      .catch(error => {
+        console.error("Firebase save error", error);
+        updateFirebaseStatus("Error", "Firebase save failed. Check write permissions and Realtime Database rules.");
+      });
+  }, 250);
 }
 
 function nowStamp() {
@@ -941,9 +1009,6 @@ document.addEventListener("click", event => {
   document.querySelectorAll(".checkbox-menu").forEach(menu => menu.classList.add("hidden"));
 });
 elements.refreshBtn.addEventListener("click", render);
-if (elements.themeSelect) {
-  elements.themeSelect.addEventListener("change", () => applyTheme(elements.themeSelect.value));
-}
 if (elements.publicLightningBadge) {
   elements.publicLightningBadge.addEventListener("click", () => {
     lightningPanelExpanded = !lightningPanelExpanded;
@@ -1276,7 +1341,7 @@ elements.clearHistoryBtn.addEventListener("click", () => {
   render();
 });
 
-applyTheme(currentTheme);
+initFirebase();
 if (processLightningTimers()) saveData();
 render();
 setInterval(() => {

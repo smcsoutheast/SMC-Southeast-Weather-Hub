@@ -30,11 +30,6 @@
         <p id="globalNote">All clear. Standard operations in effect.</p>
       </div>
       <div class="notice-actions">
-        <label class="theme-select-label" for="themeSelect">Theme</label>
-        <select id="themeSelect" class="theme-select" aria-label="Select page theme">
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
         <button id="refreshBtn" class="secondary small-btn" type="button">Refresh</button>
       </div>
     </section>
@@ -186,6 +181,19 @@
               <select id="eventFilter" multiple class="native-hidden" aria-hidden="true"></select>
               <p class="field-help">Select one or more tournaments.</p>
             </div>
+          </section>
+
+
+
+          <section class="admin-form firebase-status-card">
+            <div class="panel-header compact-header">
+              <div>
+                <h3>Firebase Sync</h3>
+                <p id="firebaseStatusText" class="field-help">Checking Firebase connection...</p>
+              </div>
+              <span id="firebaseStatusBadge" class="sync-badge local">Local Only</span>
+            </div>
+            <p class="field-help">Firebase lets updates sync across phones, laptops, and venue staff in real time. Add your Firebase project settings in firebase-config.js.</p>
           </section>
 
           <form id="publicViewForm" class="admin-form">
@@ -416,6 +424,9 @@
     <p>Soccer Management Company - Southeast Weather Hub</p>
   </footer>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -19,20 +19,6 @@
   --radius: 20px;
 }
 
-body[data-theme="dark"] {
-  --navy: #020617;
-  --blue: #1d4ed8;
-  --light-blue: #172554;
-  --page-bg: #0f172a;
-  --card-bg: #111827;
-  --input-bg: #0b1220;
-  --soft-bg: #1f2937;
-  --hover-bg: #263244;
-  --text: #f8fafc;
-  --muted: #cbd5e1;
-  --line: #334155;
-  --shadow: 0 18px 45px rgba(0, 0, 0, 0.4);
-}
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -102,17 +88,6 @@ h1 { font-size: clamp(44px, 10vw, 86px); margin: 0; letter-spacing: 0.06em; }
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
-}
-.theme-select-label {
-  margin: 0 0 8px;
-  font-size: 13px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.theme-select {
-  width: auto;
-  min-width: 130px;
 }
 
 .venue-grid {
@@ -305,12 +280,6 @@ button.small-btn { padding: 10px 14px; white-space: nowrap; }
 .file-list { margin: 8px 0 0; padding-left: 18px; }
 .footer { text-align: center; color: var(--muted); padding: 28px; }
 
-body[data-theme="dark"] .hero {
-  background: linear-gradient(135deg, #020617, #1e3a8a);
-}
-body[data-theme="dark"] .footer-logo {
-  filter: drop-shadow(0 12px 22px rgba(0,0,0,0.5));
-}
 
 body.command-mode .hero,
 body.command-mode .info-grid,
@@ -330,7 +299,6 @@ body.command-mode .admin-drawer { width: min(980px, 100vw); }
   .notice-card, .panel, .admin-panel, .controls { padding: 18px; }
   .notice-card { flex-direction: column; }
   .notice-actions { width: 100%; justify-content: stretch; align-items: stretch; }
-  .theme-select { width: 100%; }
   .drawer-header, .command-header { align-items: flex-start; flex-direction: column; }
   button { width: 100%; }
   .admin-shield { width: 54px; height: 54px; }
@@ -677,4 +645,33 @@ body.command-mode .venue-grid {
   .app-links {
     justify-content: center;
   }
+}
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 104px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: #64748b;
+}
+.sync-badge.connected,
+.sync-badge.synced {
+  background: #15803d;
+}
+.sync-badge.local-only {
+  background: #475569;
+}
+.sync-badge.offline,
+.sync-badge.error {
+  background: #b91c1c;
+}
+.firebase-status-card .compact-header {
+  gap: 12px;
 }

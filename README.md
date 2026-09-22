@@ -251,3 +251,12 @@ For live use, restrict write access before sharing the admin password widely.
 ## Display Theme
 
 The public hotline and command center use a fixed light theme. There is no visitor theme selector.
+## Lightning timer overlap fix
+
+- Multiple lightning delay entries for the same venue now act as one active delay window.
+- An older expired countdown cannot change a venue to Green while a newer countdown is still active.
+- The venue remains Red until the latest active countdown finishes or SMC staff use Manual All Clear.
+- A new qualifying lightning check extends the active countdown when its clear time is later than the existing timer.
+- Manual All Clear closes all active lightning timers for the selected venue.
+- Admin and public countdown displays follow the latest active timer for the venue.
+

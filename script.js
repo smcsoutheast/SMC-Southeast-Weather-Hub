@@ -526,18 +526,56 @@ function getCommandVenues() {
   });
 }
 
-function getLatestPublicLightningAlerts() {
-  const publicVenueIds = new Set(getPublicVenues().map(venue => venue.id));
-  const latestByVenue = new Map();
+function getVenueLightningState(venueId, now = Date.now()) {
+  const venueAlerts = data.lightningAlerts.filter(alert => alert.venueId === venueId);
+  const relevantAlerts = [];
 
-  data.lightningAlerts.forEach(alert => {
-    if (!publicVenueIds.has(alert.venueId) || latestByVenue.has(alert.venueId)) return;
-    const countdownActive = alert.status === "red" && alert.allClearTarget && !alert.autoCleared;
-    const monitoringActive = alert.status === "yellow";
-    if (countdownActive || monitoringActive) latestByVenue.set(alert.venueId, alert);
+  for (const alert of venueAlerts) {
+    if (alert.status === "green") break;
+    relevantAlerts.push(alert);
+  }
+
+  const unresolvedRedAlerts = relevantAlerts.filter(alert =>
+    alert.status === "red" &&
+    alert.allClearTarget &&
+    !alert.autoCleared &&
+    !alert.manualCleared
+  );
+
+  const activeRedAlerts = unresolvedRedAlerts.filter(alert => Number(alert.allClearTarget) > now);
+  const timerTarget = activeRedAlerts.reduce((latest, alert) => Math.max(latest, Number(alert.allClearTarget) || 0), 0);
+  const activeRedAlert = activeRedAlerts.reduce((selected, alert) => {
+    if (!selected) return alert;
+    return Number(alert.allClearTarget) >= Number(selected.allClearTarget) ? alert : selected;
+  }, null);
+  const latestYellowAlert = relevantAlerts.find(alert => alert.status === "yellow") || null;
+
+  return {
+    latestAlert: venueAlerts[0] || null,
+    relevantAlerts,
+    unresolvedRedAlerts,
+    activeRedAlerts,
+    activeRed: activeRedAlerts.length > 0,
+    activeRedAlert,
+    timerTarget,
+    latestYellowAlert
+  };
+}
+
+function getLatestPublicLightningAlerts() {
+  const publicVenues = getPublicVenues();
+  const alerts = [];
+
+  publicVenues.forEach(venue => {
+    const state = getVenueLightningState(venue.id);
+    if (state.activeRed && state.activeRedAlert) {
+      alerts.push({ ...state.activeRedAlert, allClearTarget: state.timerTarget, status: "red" });
+      return;
+    }
+    if (state.latestYellowAlert) alerts.push(state.latestYellowAlert);
   });
 
-  return Array.from(latestByVenue.values()).slice(0, 6);
+  return alerts.slice(0, 6);
 }
 
 function getLatestLightningAllClear() {
@@ -776,7 +814,7 @@ function renderLightningAlerts() {
         <p>${escapeHtml(alert.note || "No alert note entered.")}</p>
         <span class="alert-status-pill ${escapeAttr(alert.status)}">${escapeHtml(titleCaseStatus(alert.status))}</span>
         ${countdown ? `<div class="lightning-countdown">${escapeHtml(countdown)}</div>` : ""}
-        ${["red", "yellow"].includes(alert.status) ? `<button class="secondary small-btn manual-clear-btn" data-action="manualLightningAllClear" data-alert-id="${escapeAttr(alert.id)}" type="button">Manual All Clear</button>` : ""}
+        ${["red", "yellow"].includes(alert.status) && !alert.autoCleared ? `<button class="secondary small-btn manual-clear-btn" data-action="manualLightningAllClear" data-alert-id="${escapeAttr(alert.id)}" type="button">Manual All Clear</button>` : ""}
       </div>
     `;
   }).join("") : `<p class="muted">No lightning alerts recorded yet.</p>`;
@@ -794,8 +832,11 @@ function renderFieldBoardAdmin() {
 }
 
 function getLightningCountdownText(alert) {
-  if (!alert.allClearTarget || alert.status !== "red") return "";
-  const remaining = alert.allClearTarget - Date.now();
+  if (alert.status !== "red" || alert.autoCleared) return "";
+  const state = getVenueLightningState(alert.venueId);
+  const target = state.activeRed && state.timerTarget ? state.timerTarget : alert.allClearTarget;
+  if (!target) return "";
+  const remaining = target - Date.now();
   if (remaining <= 0) return "All-clear timer complete. Confirm conditions before play resumes.";
   const minutes = Math.ceil(remaining / 60000);
   return `${minutes} minute lightning timer remaining`;
@@ -803,20 +844,49 @@ function getLightningCountdownText(alert) {
 
 function processLightningTimers() {
   let changed = false;
-  data.lightningAlerts.forEach(alert => {
-    if (alert.status !== "red" || !alert.allClearTarget || alert.autoCleared || Date.now() < alert.allClearTarget) return;
-    const venue = data.venues.find(item => item.id === alert.venueId);
-    if (!venue) return;
-    venue.status = "green";
-    venue.note = "The lightning timer has cleared. Play may resume when SMC staff, referees, and facility staff confirm fields are safe.";
-    alert.status = "green";
-    alert.autoCleared = true;
-    alert.note = "30-minute lightning timer completed. Staff confirmation is still required before restart.";
+  const now = Date.now();
+
+  data.venues.forEach(venue => {
+    const state = getVenueLightningState(venue.id, now);
+
+    if (state.activeRed) {
+      if (venue.status !== "red") {
+        venue.status = "red";
+        venue.note = "Lightning delay remains active. The venue will stay Red until the latest lightning countdown finishes or SMC staff issue a Manual All Clear.";
+        data.lastUpdated = nowStamp();
+        changed = true;
+      }
+      return;
+    }
+
+    if (!state.unresolvedRedAlerts.length) return;
+
+    state.unresolvedRedAlerts.forEach((alert, index) => {
+      alert.autoCleared = true;
+      alert.allClearTarget = null;
+      if (index > 0) alert.superseded = true;
+    });
+
+    const newestExpiredRed = state.unresolvedRedAlerts[0];
+    newestExpiredRed.status = "green";
+    newestExpiredRed.note = "The latest 30-minute lightning timer completed. Staff confirmation is still required before restart.";
+
+    if (state.latestYellowAlert) {
+      venue.status = "yellow";
+      venue.note = state.latestYellowAlert.note || "Lightning remains under monitoring near this venue.";
+      addHistory(`${venue.name} lightning monitoring`, venue.note, "yellow");
+      addTimeline(`${venue.name} lightning delay timer completed`, "The delay countdown finished, but lightning monitoring remains active.");
+    } else {
+      venue.status = "green";
+      venue.note = "The latest lightning timer has cleared. Play may resume when SMC staff, referees, and facility staff confirm fields are safe.";
+      addHistory(`${venue.name} lightning all clear`, venue.note, "green");
+      addTimeline(`${venue.name} lightning timer cleared`, venue.note);
+    }
+
     data.lastUpdated = nowStamp();
-    addHistory(`${venue.name} lightning all clear`, venue.note, "green");
-    addTimeline(`${venue.name} lightning timer cleared`, venue.note);
     changed = true;
   });
+
   return changed;
 }
 
@@ -1180,6 +1250,14 @@ function applyManualLightningAllClear(alertId) {
     venue.note = note;
   }
 
+  data.lightningAlerts.forEach(item => {
+    if (item.venueId !== alert.venueId || !["red", "yellow"].includes(item.status)) return;
+    item.allClearTarget = null;
+    item.autoCleared = true;
+    item.manualCleared = true;
+    if (item.id !== alertId) item.superseded = true;
+  });
+
   alert.status = "green";
   alert.note = note;
   alert.allClearTarget = null;
@@ -1225,6 +1303,7 @@ elements.lightningForm.addEventListener("submit", event => {
   let status = "yellow";
   let note = "Lightning is being monitored near this venue. Games remain scheduled unless SMC staff post a delay or suspension.";
   let allClearTarget = null;
+  const existingLightningState = getVenueLightningState(venue.id);
 
   if (!Number.isNaN(distance) && distance <= LIGHTNING_RED_MILES && (Number.isNaN(minutes) || minutes < LIGHTNING_CLEAR_MINUTES)) {
     status = "red";
@@ -1236,6 +1315,15 @@ elements.lightningForm.addEventListener("submit", event => {
   } else if (!Number.isNaN(minutes) && minutes >= LIGHTNING_CLEAR_MINUTES) {
     status = "green";
     note = `The 30-minute lightning timer has cleared for ${venue.name}. Play may resume when SMC staff, referees, and facility staff confirm fields are safe.`;
+  }
+
+  if (status === "red" && existingLightningState.activeRed && existingLightningState.timerTarget) {
+    allClearTarget = Math.max(allClearTarget || 0, existingLightningState.timerTarget);
+    note = `Lightning delay remains active at ${venue.name}. The 30-minute countdown is based on the latest qualifying strike and will not clear until the newest active timer is complete.`;
+  } else if (status !== "red" && existingLightningState.activeRed) {
+    status = "red";
+    allClearTarget = existingLightningState.timerTarget;
+    note = `Lightning delay remains active at ${venue.name}. A previous qualifying strike still has an active countdown. Teams should remain off the fields until the latest timer is complete or SMC staff issue a Manual All Clear.`;
   }
 
   venue.status = status;

@@ -61,6 +61,8 @@ let lightningPanelExpanded = false;
 let firebaseDb = null;
 let firebaseReady = false;
 let firebaseListening = false;
+let firebaseInitialSyncComplete = false;
+let firebaseHydrationPending = false;
 let suppressFirebasePush = false;
 let pendingFirebaseSave = null;
 
@@ -248,11 +250,17 @@ function updateFirebaseStatus(status, message) {
 function initFirebase() {
   const config = getFirebaseConfig();
   if (!config) {
+    firebaseInitialSyncComplete = true;
+    firebaseHydrationPending = false;
     updateFirebaseStatus("Local Only", "Firebase is not connected. This page currently saves updates to this browser only.");
     return;
   }
 
+  firebaseHydrationPending = true;
+
   if (!window.firebase || !window.firebase.database) {
+    firebaseInitialSyncComplete = true;
+    firebaseHydrationPending = false;
     updateFirebaseStatus("Offline", "Firebase scripts did not load. Check your internet connection or script tags.");
     return;
   }
@@ -261,14 +269,11 @@ function initFirebase() {
     if (!firebase.apps.length) firebase.initializeApp(config);
     firebaseDb = firebase.database();
     firebaseReady = true;
-    updateFirebaseStatus("Connected", "Firebase connected. Updates sync across devices in real time.");
+    updateFirebaseStatus("Connecting", "Firebase connected. Loading the current cloud status before this device is allowed to save.");
     listenToFirebase();
-
-    if (!config.readOnlyPublic) {
-      const localSnapshot = localStorage.getItem(STORAGE_KEY);
-      if (localSnapshot && data.lastUpdated) pushDataToFirebase();
-    }
   } catch (error) {
+    firebaseInitialSyncComplete = true;
+    firebaseHydrationPending = false;
     console.error("Firebase setup error", error);
     updateFirebaseStatus("Error", "Firebase setup failed. Check firebase-config.js and Realtime Database rules.");
   }
@@ -277,8 +282,38 @@ function initFirebase() {
 function listenToFirebase() {
   if (!firebaseReady || firebaseListening) return;
   firebaseListening = true;
-  firebaseDb.ref(FIREBASE_DATA_PATH).on("value", snapshot => {
+  const ref = firebaseDb.ref(FIREBASE_DATA_PATH);
+
+  ref.on("value", snapshot => {
     const remoteData = snapshot.val();
+
+    // The first Firebase read is authoritative. This prevents a second device
+    // with stale LocalStorage from overwriting active venue or lightning status.
+    if (!firebaseInitialSyncComplete) {
+      suppressFirebasePush = true;
+
+      if (remoteData) {
+        data = migrateData(remoteData);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        updateFirebaseStatus("Synced", `Cloud status loaded: ${nowStamp()}`);
+      } else {
+        updateFirebaseStatus("Connected", "Firebase connected. No cloud data has been saved yet.");
+      }
+
+      suppressFirebasePush = false;
+      firebaseInitialSyncComplete = true;
+      firebaseHydrationPending = false;
+      render();
+
+      // Only seed an empty Firebase database after Firebase confirms it is empty.
+      // Existing cloud data always wins over this device's cached browser data.
+      if (!remoteData && !getFirebaseConfig().readOnlyPublic) {
+        const localSnapshot = localStorage.getItem(STORAGE_KEY);
+        if (localSnapshot && data.lastUpdated) pushDataToFirebase();
+      }
+      return;
+    }
+
     if (!remoteData) {
       updateFirebaseStatus("Connected", "Firebase connected. No cloud data has been saved yet.");
       return;
@@ -291,13 +326,17 @@ function listenToFirebase() {
     updateFirebaseStatus("Synced", `Last cloud sync: ${nowStamp()}`);
     render();
   }, error => {
+    firebaseInitialSyncComplete = true;
+    firebaseHydrationPending = false;
     console.error("Firebase read error", error);
     updateFirebaseStatus("Error", "Firebase read failed. Check Realtime Database rules.");
   });
 }
 
 function pushDataToFirebase() {
-  if (suppressFirebasePush || !firebaseReady || !firebaseDb) return;
+  // Never write before the first cloud read completes. A stale browser must not
+  // overwrite the live tournament state when the page opens on another device.
+  if (suppressFirebasePush || firebaseHydrationPending || !firebaseInitialSyncComplete || !firebaseReady || !firebaseDb) return;
   clearTimeout(pendingFirebaseSave);
   pendingFirebaseSave = setTimeout(() => {
     firebaseDb.ref(FIREBASE_DATA_PATH).set(data)
@@ -1430,9 +1469,19 @@ elements.clearHistoryBtn.addEventListener("click", () => {
 });
 
 initFirebase();
-if (processLightningTimers()) saveData();
+
+// Render cached data immediately for speed, but do not let timers mutate or save
+// anything until Firebase has loaded the authoritative cloud state.
 render();
+if (!firebaseHydrationPending && processLightningTimers()) saveData();
+
 setInterval(() => {
+  if (firebaseHydrationPending) {
+    renderPublicLightningAlerts();
+    renderLightningAlerts();
+    return;
+  }
+
   if (processLightningTimers()) {
     saveData();
     render();

@@ -260,3 +260,9 @@ The public hotline and command center use a fixed light theme. There is no visit
 - Manual All Clear closes all active lightning timers for the selected venue.
 - Admin and public countdown displays follow the latest active timer for the venue.
 
+
+## Cross-device Firebase status protection
+
+This build loads Firebase before allowing the browser to write hotline state. Existing cloud data is authoritative on page load. A phone, tablet, or laptop with older LocalStorage data will no longer overwrite active venue status, lightning delays, countdowns, field status, or public notes when the page opens.
+
+The build also pauses lightning timer mutations until the initial Firebase read finishes and adds cache-busting query strings to the local CSS and JavaScript files.

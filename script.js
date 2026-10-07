@@ -18,6 +18,7 @@ const tournamentOptions = [
   "Florida Winter Cup Juniors (FL)",
   "Florida Winter Cup & Showcase (FL)",
   "Gulf Coast Invitational (FL)",
+  "Sailfish Cup (FL)",
   "Alabama President's Day Invitational (AL)",
   "Palm Beach Gardens Classic Spring (FL)",
   "Florida St Paddy's Day Invitational (FL)",
